@@ -112,6 +112,8 @@ class Cadent3SyringePumpCommands(LabDeviceCommands):
     INIT_SYRINGE = {"name": "W10", "reply": {"type": str}}
     # Initialize valve only
     INIT_VALVE = {"name": "W7", "reply": {"type": str}}
+    # Reset controller
+    RESET_CONTROLLER = {"name": "W9", "reply": {"type": str}}
 
     # ## Plunger movement commands ##
     # Move plunger to absolute position
@@ -181,6 +183,10 @@ class Cadent3SyringePumpCommands(LabDeviceCommands):
     GET_VOLT = {"name": "*", "reply": {"type": int}}
     # Query valve position as port (reply: 1…16 = valve port number, ? = Invalid position)
     GET_VALVE_POS = {"name": "?8", "reply": {"type": str, "parser": str.upper}}
+    # Query flag valve initialized
+    GET_VALVE_INIT = {"name": "f65?", "reply": {"type": bool}}
+    # Query flag syringe pump initialized
+    GET_SYR_INIT = {"name": "f66?", "reply": {"type": bool}}
 
     # ################### Configuration commands #############################
 
@@ -467,10 +473,14 @@ class Cadent3SyringePump(AbstractSyringePump, AbstractDistributionValve):
     @in_simulation_device_returns(True)
     def is_initialized(self) -> bool:
         """Check if pump has been initialized properly after power-up.
+           Note that this is usually the case and pump needs no re-initialization on power-up.
+           According to IMI Engineering: Flags 65 and 66 may not work as expected.
+           Use move command and check the status byte instead.
         """
         try:
             self.autorun = False
-            _ = self.send(self.cmd.GET_STATUS)
+            valve_init = self.send(self.cmd.GET_VALVE_INIT)
+            syringe_init = self.send(self.cmd.GET_SYR_INIT)
         except PLConnectionError:
             return False
         finally:
@@ -480,7 +490,7 @@ class Cadent3SyringePump(AbstractSyringePump, AbstractDistributionValve):
             self.logger.debug("is_idle()::false.")
             return False
         self.logger.debug("is_idle()::true.")
-        return True
+        return valve_init and syringe_init
 
     @in_simulation_device_returns(LabDeviceReply(body=Cadent3SyringePumpCommands.DEFAULT_STATUS))
     def is_idle(self) -> bool:
